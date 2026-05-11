@@ -5,3 +5,4 @@ data/
 results/
 *.csv
 *.png
+!assets/*.png
