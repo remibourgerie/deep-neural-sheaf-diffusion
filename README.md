@@ -1,17 +1,24 @@
 # Deep Neural Sheaf Diffusion
 
-Code for the paper **"Deep Neural Sheaf Diffusion"** (GFM@ICM workshop, 2026, "Graph Foundation Models:
-A New Era for Graph Machine Learning").
+Code for the paper **"Deep Neural Sheaf Diffusion"** (GFM@ICML workshop 2026).
 
 <p align="center"><img src="assets/figure1_architecture.png" width="50%"></p>
 
-DNSD replaces the sheaf Laplacian of NSD (Bodnar et al. 2022) with a sheaf adjacency operator, enabling stable learning at large depth. Three binary flags control the model:
+---
 
-| Flag | Effect |
-|------|--------|
-| `adj` | Adjacency operator instead of Laplacian |
-| `odd` | Tanh activation (vs ReLU) |
-| `gate` | Per-stalk GRU-style gate on diffusion updates |
+## What is this?
+
+Standard GNNs struggle at depth: repeated aggregation causes representations to collapse (oversmoothing) or lose sensitivity (oversquashing). Neural Sheaf Diffusion (NSD, Bodnar et al. 2022) has strong theoretical guarantees against collapse, but in practice the update signal vanishes as depth increases — deeper layers receive progressively smaller inputs.
+
+**DNSD fixes this** by replacing the sheaf Laplacian with a sheaf adjacency operator. Instead of measuring *disagreement* between neighbours (which shrinks to zero as diffusion progresses), it aggregates *dependency* — a signal that stays informative at any depth. Three complementary flags further stabilise deep training:
+
+| Flag | What it does | Why it helps |
+|------|-------------|--------------|
+| `adj` | Adjacency operator instead of Laplacian | Prevents vanishing signal at depth |
+| `odd` | Tanh activation instead of ReLU | Prevents one-sided drift under repeated composition |
+| `gate` | Per-stalk sigmoid gate on diffusion updates | Reduces variance; filters noisy contributions |
+
+The result: DNSD improves with depth up to 12–16 layers, while GAT and NSD plateau or degrade.
 
 ---
 
@@ -25,33 +32,79 @@ Tested with Python 3.11, PyTorch 2.7.1, PyG 2.6.1 on Linux (CUDA and CPU).
 
 ---
 
-## Reproduce Figure 2 — depth scaling at G5
+## Quick start
 
-Run training, then plot:
+```python
+import torch
+from torch_geometric.data import Data
+from models import create_model, train_model
+
+# Your graph data (standard PyG format)
+data = Data(x=node_features, edge_index=edge_index, y=labels)
+data.train_mask = ...  # bool tensor, shape [N]
+data.val_mask   = ...
+data.test_mask  = ...
+
+# Build a DNSD model — key parameters:
+#   hidden_dim   total hidden size; must be divisible by num_stalks
+#   num_stalks   stalk dimension d; stalk_dim = hidden_dim / num_stalks
+#   adj/odd/gate DNSD flags (all False = plain NSD-style baseline)
+model = create_model(
+    'dnsd_diag',
+    input_dim  = data.x.size(1),
+    hidden_dim = 64,   # 64 / 8 = 8-dim stalks
+    output_dim = data.y.max().item() + 1,
+    num_stalks = 8,
+    num_layers = 8,
+    adj=True, odd=True, gate=True,  # full DNSD
+)
+
+# Train — returns (val_acc, test_acc, history)
+val_acc, test_acc, history = train_model(model, data, lr=0.01, epochs=500)
+print(f"Test accuracy: {test_acc:.4f}")
+```
+
+`train_model` uses Adam + ReduceLROnPlateau (patience 20) + early stopping (patience 100). The best checkpoint is automatically restored.
+
+### Choosing parameters
+
+- `hidden_dim` must be divisible by `num_stalks`. The paper uses `hidden_dim=18, num_stalks=3` for synthetic experiments and `hidden_dim=64, num_stalks=8` for real-world.
+- Start with `adj=True, odd=True` — these provide the largest gains. Add `gate=True` to reduce variance across runs.
+- Diagonal maps (`dnsd_diag`) match or outperform full maps (`dnsd_full`) while being faster.
+- DNSD benefits from depth: try `num_layers` in `{8, 12, 16}`.
+
+### Training on a separate test graph (synthetic setting)
+
+For the synthetic benchmark, train and test graphs are generated independently. Pass `test_data` to evaluate on a separate graph:
+
+```python
+val_acc, test_acc, history = train_model(
+    model, train_data, lr=0.01, epochs=500, test_data=test_data
+)
+```
+
+---
+
+## Reproduce the paper
+
+### Figure 2 — depth scaling at G5
 
 ```bash
 python train_synthetic.py --config config_figure2.yaml --output results_figure2.csv
 python plot_figure2.py --results results_figure2.csv --level 5 --output figure2.png
 ```
 
-This sweeps depths 2–20 for all model variants at perturbation level G5 (≈ 5 inter-community edges per node). Benchmark graphs are cached to `./data/community_cache/` on first run (~2 min for 9 graphs).
+Sweeps depths 2–20 for all model variants at perturbation level G5. Benchmark graphs are cached to `./data/community_cache/` on first run (~2 min for 9 graphs). Expected output:
 
-<!-- FIGURE 2: replace the line below with the actual path once generated -->
 ![Figure 2 — depth scaling at G5](assets/figure2.png)
 
----
-
-## Reproduce Table 2 — synthetic community detection
+### Table 2 — synthetic community detection (~12 h on a single GPU)
 
 ```bash
 python train_synthetic.py --config config_synthetic.yaml --output results_synthetic.csv
 ```
 
-Sweeps all perturbation levels G0–G10, all model variants, 5 model seeds. Estimated runtime: ~12 h on a single GPU.
-
-Node classification accuracy (%) on synthetic community detection across perturbation levels G0–G10. Each entry is mean±std at the best layer depth (in parentheses) for that (level, model) pair. 🥇 1st, 🥈 2nd, 🥉 3rd best per column.
-
-> **Table 2**
+Sweeps all perturbation levels G0–G10, all model variants, 5 model seeds. The key finding: DNSD variants with `adj=True` outperform NSD by 20–30pp at mid-heterophily levels (G3–G9).
 
 | Model | Map | Adj | Odd | Gate | G0 | G1 | G2 | G3 | G4 | G5 | G6 | G7 | G8 | G9 | G10 |
 |-------|-----|:---:|:---:|:----:|----|----|----|----|----|----|----|----|----|----|----|
@@ -71,19 +124,13 @@ Node classification accuracy (%) on synthetic community detection across perturb
 | DNSD | full | | ✓ | ✓ | 🥉 54.3±5.6 (L16) | 51.4±4.4 (L16) | 58.9±1.7 (L16) | 56.6±2.7 (L16) | 57.2±4.3 (L16) | 58.0±2.6 (L12) | 54.3±5.5 (L12) | 53.7±3.2 (L16) | 53.1±2.7 (L16) | 52.7±1.0 (L12) | 95.5±1.6 (L16) |
 | DNSD | full | | | | 47.5±0.8 (L12) | 47.9±4.1 (L2) | 52.4±1.6 (L16) | 49.0±2.4 (L16) | 50.3±3.2 (L16) | 49.2±2.7 (L12) | 46.6±2.5 (L16) | 46.4±1.8 (L16) | 47.6±1.1 (L16) | 50.4±0.9 (L16) | 96.7±1.9 (L16) |
 
----
-
-## Reproduce Table 3 — real-world heterophilic benchmarks
+### Table 3 — real-world heterophilic benchmarks (~6 h on a single GPU)
 
 ```bash
 python train_realworld.py --config config_realworld.yaml --output results_realworld.csv
 ```
 
-Datasets are downloaded automatically via `torch_geometric` on first run.
-
-Node classification accuracy (%) on heterophilic benchmarks. All DNSD variants use diagonal restriction maps and include LayerNorm. Each entry is mean±std at the best layer depth (in parentheses) for that (dataset, model) pair. 🥇 1st, 🥈 2nd, 🥉 3rd best per column.
-
-> **Table 3**
+Datasets are downloaded automatically via `torch_geometric` on first run. DNSD (diag, adj+odd) achieves best or second-best on 5 out of 6 datasets, with the largest gains on Roman Empire (+4.1pp) and Penn94 (+3.7pp over NSD diag).
 
 | Model | Map | Adj | Odd | Gate | Roman Empire | Amazon Ratings | Minesweeper | Tolokers | Questions | Penn94 |
 |-------|-----|:---:|:---:|:----:|-------------|----------------|-------------|----------|-----------|--------|
@@ -100,33 +147,59 @@ Node classification accuracy (%) on heterophilic benchmarks. All DNSD variants u
 
 ---
 
-## Model variants
+## Model reference
 
-All models are available via `create_model(name, input_dim, hidden_dim, output_dim, num_stalks, num_layers)`:
+All models are instantiated via `create_model(name, **kwargs)` and trained via `train_model(model, data, **kwargs)`.
+
+### Available models
 
 | Name | Description |
 |------|-------------|
-| `dnsd_full` | DNSD, full d×d restriction maps |
-| `dnsd_diag` | DNSD, diagonal restriction maps |
-| `nsd_full` | NSD v1 (Bodnar et al. 2022), full maps |
-| `nsd_diag` | NSD v1, diagonal maps |
+| `dnsd_diag` | DNSD with diagonal restriction maps (recommended) |
+| `dnsd_full` | DNSD with full d×d restriction maps |
+| `nsd_diag` | NSD v1 (Bodnar et al. 2022), diagonal maps |
+| `nsd_full` | NSD v1, full maps |
 | `gat` | Graph Attention Network |
 | `mpnn` | Message Passing Neural Network |
-| `mlp` | Multilayer Perceptron (no graph structure) |
+| `mlp` | MLP (ignores graph structure) |
 
-Pass `adj`, `odd`, `gate` as booleans to `create_model` for DNSD variants:
+### Key `create_model` arguments
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `input_dim` | int | Input feature dimension |
+| `hidden_dim` | int | Total hidden size — must be divisible by `num_stalks` |
+| `output_dim` | int | Number of classes |
+| `num_stalks` | int | Stalk dimension d; `stalk_dim = hidden_dim / num_stalks` |
+| `num_layers` | int | Number of message-passing layers |
+| `adj` | bool | Use adjacency operator (DNSD only, default False) |
+| `odd` | bool | Use tanh activation (DNSD only, default False) |
+| `gate` | bool | Use per-stalk gate (DNSD only, default False) |
+
+### `train_model` signature
 
 ```python
-from models import create_model, train_model
-
-model = create_model(
-    'dnsd_diag',
-    input_dim=data.x.size(1),
-    hidden_dim=18,
-    output_dim=3,
-    num_stalks=3,
-    num_layers=8,
-    adj=True, odd=True, gate=True,
+val_acc, test_acc, history = train_model(
+    model,
+    data,               # PyG Data with train_mask / val_mask / test_mask
+    lr=0.01,
+    weight_decay=5e-4,
+    epochs=500,
+    seed=42,
+    verbose=False,
+    test_data=None,     # optional separate test graph (synthetic setting)
 )
-_, _, history = train_model(model, data, lr=0.01, epochs=500)
+```
+
+---
+
+## Citation
+
+```bibtex
+@inproceedings{anonymous2026dnsd,
+  title     = {Deep Neural Sheaf Diffusion},
+  author    = {Anonymous},
+  booktitle = {ICML 2026 Workshop on Graph Foundation Models},
+  year      = {2026},
+}
 ```
