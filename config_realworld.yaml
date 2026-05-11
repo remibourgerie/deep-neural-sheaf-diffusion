@@ -1,0 +1,55 @@
+# Real-world heterophilic benchmark sweep — reproduces Table 3
+# =============================================================
+# Datasets from Platonov et al. 2023 (HeterophilousGraphDataset)
+# and Lim et al. 2021 (LINKXDataset). Downloaded automatically on first run.
+# Estimated runtime: ~6 h on a single GPU.
+
+# Datasets to evaluate.
+# Supported: roman_empire | amazon_ratings | minesweeper | tolokers | questions
+#            penn94 | chameleon | squirrel | actor
+datasets:
+  - roman_empire
+  - amazon_ratings
+  - minesweeper
+  - tolokers
+  - questions
+  - penn94
+
+# Model initialisation seeds — 5 independent runs per configuration.
+model_seeds: [0, 1, 2, 3, 4]
+
+# Layer depths to sweep
+num_layers: [2, 4, 8]
+
+# hidden_dim must be divisible by num_stalks (stalk_dim = hidden_dim / num_stalks)
+hidden_dim: 64
+num_stalks: 8
+
+epochs: 500
+lr: 0.01
+
+data_dir: ./data   # datasets are downloaded here on first run
+
+# Models to evaluate.
+# DNSD flags: adj (adjacency op), odd (tanh activation), gate (per-stalk GRU gate).
+# Non-sheaf baselines (gat, mpnn, mlp) ignore num_stalks and all DNSD flags.
+models:
+  # DNSD — diagonal restriction maps (Table 3 paper rows, in order)
+  - {name: dnsd_diag, adj: true,  odd: true,  gate: true}    # adj+odd+gate
+  - {name: dnsd_diag, adj: true,  odd: true,  gate: false}   # adj+odd
+  - {name: dnsd_diag, adj: true,  odd: false, gate: true}    # adj+gate
+  - {name: dnsd_diag, adj: false, odd: true,  gate: true}    # odd+gate
+  - {name: dnsd_diag, adj: false, odd: false, gate: false}   # none
+  # DNSD — full d×d restriction maps
+  - {name: dnsd_full, adj: true,  odd: true,  gate: true}
+  - {name: dnsd_full, adj: true,  odd: true,  gate: false}
+  - {name: dnsd_full, adj: true,  odd: false, gate: true}
+  - {name: dnsd_full, adj: false, odd: true,  gate: true}
+  - {name: dnsd_full, adj: false, odd: false, gate: false}
+  # NSD v1 baselines (Bodnar et al. 2022) — Laplacian-based sheaf diffusion
+  - {name: nsd_diag}
+  - {name: nsd_full}
+  # Standard GNN baselines
+  - {name: gat}
+  - {name: mpnn}
+  - {name: mlp}

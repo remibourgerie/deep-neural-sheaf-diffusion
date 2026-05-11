@@ -1,0 +1,70 @@
+# Figure 2: depth scaling at perturbation level G5 — KNN, 3 communities
+# ======================================================================
+# Sweeps depths 2–20 for all model variants to produce depth-vs-accuracy curves.
+# Benchmark graphs are cached to cache_dir on first run (~2 min for 9 graphs).
+#
+# Usage:
+#   python train_synthetic.py --config config_figure2.yaml --output results_figure2.csv
+#   python plot_figure2.py --results results_figure2.csv --level 5 --output assets/figure2.png
+
+# Graph topology
+# graph_type: knn | sbm
+graph_type: knn
+
+# Edge perturbation policy
+# policy: inter_only | random
+policy: inter_only
+
+# Benchmark graph parameters
+num_nodes: 1500
+num_communities: 3
+sigma: 3.0          # feature cluster spread (higher = easier)
+k_neighbours: 8     # KNN graph degree
+p_intra: 0.005      # SBM intra-community edge probability (used when graph_type: sbm)
+# feature_type: gaussian | random | ones
+feature_type: gaussian
+
+# Dataset generation seeds — control graph topology and node features.
+train_seeds: [42, 43, 44, 45, 46, 47]   # graphs batched together for training
+test_seeds: [100, 101, 102]              # graphs batched together for evaluation
+
+# Model initialisation seeds — 5 independent runs per configuration.
+model_seeds: [0, 1, 2, 3, 4]
+
+# Single perturbation level for the depth-scaling plot
+levels: [5]
+
+# Fine-grained depth sweep for smooth curves
+num_layers: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+
+# hidden_dim must be divisible by num_stalks (stalk_dim = hidden_dim / num_stalks)
+hidden_dim: 18
+num_stalks: 3      # pinned to num_communities
+
+epochs: 500
+lr: 0.01
+
+cache_dir: ./data/community_cache
+
+# Models to evaluate.
+# DNSD flags: adj (adjacency op), odd (tanh activation), gate (per-stalk GRU gate).
+# Non-sheaf baselines (gat, mpnn, mlp) ignore num_stalks and all DNSD flags.
+models:
+  # DNSD — diagonal restriction maps (paper rows, in order)
+  - {name: dnsd_diag, adj: true,  odd: true,  gate: true}    # adj+odd+gate
+  - {name: dnsd_diag, adj: true,  odd: true,  gate: false}   # adj+odd
+  - {name: dnsd_diag, adj: true,  odd: false, gate: true}    # adj+gate
+  - {name: dnsd_diag, adj: false, odd: true,  gate: true}    # odd+gate
+  - {name: dnsd_diag, adj: false, odd: false, gate: false}   # none
+  # DNSD — full d×d restriction maps
+  - {name: dnsd_full, adj: true,  odd: true,  gate: true}
+  - {name: dnsd_full, adj: true,  odd: true,  gate: false}
+  - {name: dnsd_full, adj: true,  odd: false, gate: true}
+  - {name: dnsd_full, adj: false, odd: true,  gate: true}
+  - {name: dnsd_full, adj: false, odd: false, gate: false}
+  # NSD v1 baselines (Bodnar et al. 2022) — Laplacian-based sheaf diffusion
+  - {name: nsd_diag}
+  - {name: nsd_full}
+  # Standard GNN baselines
+  - {name: gat}
+  - {name: mpnn}
