@@ -3,7 +3,7 @@
 Code for the paper **"Deep Neural Sheaf Diffusion"** (GFM@ICM workshop, 2026, "Graph Foundation Models:
 A New Era for Graph Machine Learning").
 
-<img src="assets/figure1_architecture.png" width="50%">
+<p align="center"><img src="assets/figure1_architecture.png" width="50%"></p>
 
 DNSD replaces the sheaf Laplacian of NSD (Bodnar et al. 2022) with a sheaf adjacency operator, enabling stable learning at large depth. Three binary flags control the model:
 
