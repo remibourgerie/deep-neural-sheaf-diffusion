@@ -1,6 +1,8 @@
 # Deep Neural Sheaf Diffusion
 
-Code for the paper **"Deep Neural Sheaf Diffusion"** (GFM@ICML workshop 2026).
+Code for the paper [**"Deep Neural Sheaf Diffusion"**](https://arxiv.org/abs/2605.19021) — accepted at the ICML 2026 Workshop on Graph Foundation Models (GFM@ICML 2026), Seoul, South Korea.
+
+*Rémi Bourgerie, Šarūnas Girdzijauskas, Viktoria Fodor*
 
 <p align="center"><img src="assets/figure1_architecture.png" width="50%"></p>
 
@@ -196,10 +198,10 @@ val_acc, test_acc, history = train_model(
 ## Citation
 
 ```bibtex
-@inproceedings{anonymous2026dnsd,
+@inproceedings{bourgerie2026dnsd,
   title     = {Deep Neural Sheaf Diffusion},
-  author    = {Anonymous},
-  booktitle = {ICML 2026 Workshop on Graph Foundation Models},
-  year      = {2026},
+  author    = {Bourgerie, R{\'e}mi and Girdzijauskas, {\v{S}}ar{\=u}nas and Fodor, Viktoria},
+  booktitle = {ICML 2026 Workshop on Graph Foundation Models (GFM@ICML 2026)},
+  url       = {https://arxiv.org/abs/2605.19021},
 }
 ```
