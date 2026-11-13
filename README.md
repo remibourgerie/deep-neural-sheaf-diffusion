@@ -24,6 +24,37 @@ The result: DNSD improves with depth up to 12–16 layers, while GAT and NSD pla
 
 ---
 
+## 👉 Use DNSD in your own project
+
+To use the models, we recommend the PyG library [Sheaf-MPNN](https://github.com/alessioborgi/sheaf-mpnn), which includes both the sheaf adjacency operator and DNSD. This repository is the research code for reproducing the paper.
+
+```bash
+pip install "sheaf_mpnn @ git+https://github.com/alessioborgi/sheaf-mpnn"
+```
+
+```python
+from sheaf_mpnn.sheaf_adj import SheafAdjModel, SheafAdjVariant
+from sheaf_mpnn.dnsd import DNSDModel, DNSDVariant
+
+# Sheaf adjacency operator
+model = SheafAdjModel(
+    in_channels=data.x.size(1), out_channels=num_classes,
+    stalk_dim=8, hidden_dim=64, num_layers=8,
+    variant=SheafAdjVariant.DIAGONAL,
+)
+
+# DNSD (adjacency operator is built in; odd / gate as in the paper)
+model = DNSDModel(
+    in_channels=data.x.size(1), out_channels=num_classes,
+    stalk_dim=8, hidden_dim=64, num_layers=8,
+    variant=DNSDVariant.DIAGONAL, odd=True, gate=True,
+)
+
+out = model(data.x, data.edge_index)
+```
+
+---
+
 ## Install
 
 ```bash
